@@ -5,6 +5,8 @@ node_modules/
 out/
 dist/
 release/
+dist-electron/
+*.tsbuildinfo
 
 *.log
 .env
