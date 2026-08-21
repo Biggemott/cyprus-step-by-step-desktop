@@ -1,0 +1,12 @@
+references/
+
+node_modules/
+.next/
+out/
+dist/
+release/
+
+*.log
+.env
+.env.*
+!.env.example
