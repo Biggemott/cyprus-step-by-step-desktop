@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.ts\" \"*.{json,ts}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/**/*.ts\" \"*.{json,ts}\"",
     "electron:dev": "concurrently -k \"npm.cmd run dev\" \"wait-on http://localhost:3000 && npm.cmd run electron:compile && electron .\"",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:prod": "npm.cmd run electron:compile && set ELECTRON_STATIC=1&& electron ."
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "concurrently": "10.0.5",
+    "prettier": "3.9.6",
     "typescript": "5.9.3",
     "wait-on": "9.1.0"
   }
