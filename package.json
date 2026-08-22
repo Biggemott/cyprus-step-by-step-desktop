@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Desktop prototype of Cyprus Step-by-Step built with Next.js, TypeScript and Electron.",
   "author": "Nikita Glazkov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Biggemott/cyprus-step-by-step-desktop.git"
+  },
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {

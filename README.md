@@ -6,7 +6,11 @@ Cyprus Step-by-Step Desktop is a desktop prototype of Cyprus Step-by-Step built 
 
 ## Try the Windows build
 
-Portable Windows builds are published in the repository's GitHub Releases. No installer is required: download the portable `.exe` and run it directly. Progress is persisted between launches, and the demo supports native Windows reminders.
+[Download for Windows (.exe, no installation)](https://github.com/Biggemott/cyprus-step-by-step-desktop/releases/download/v0.1.0/Cyprus-Step-by-Step-0.1.0-portable.exe)
+
+[View the v0.1.0 release notes](https://github.com/Biggemott/cyprus-step-by-step-desktop/releases/tag/v0.1.0)
+
+No installer is required: download the portable `.exe` and run it directly. Progress is persisted between launches, and the demo supports native Windows reminders.
 
 The demo executable is currently unsigned, so Windows SmartScreen may show a warning.
 
