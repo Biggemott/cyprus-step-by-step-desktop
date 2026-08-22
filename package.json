@@ -13,19 +13,21 @@
     "test": "vitest run",
     "electron:dev": "concurrently -k \"npm.cmd run dev\" \"wait-on http://localhost:3000 && npm.cmd run electron:compile && electron .\"",
     "electron:compile": "tsc -p electron/tsconfig.json",
-    "electron:prod": "npm.cmd run electron:compile && set ELECTRON_STATIC=1&& electron ."
+    "electron:prod": "npm.cmd run electron:compile && set ELECTRON_STATIC=1&& electron .",
+    "package:win:portable": "npm.cmd run build && npm.cmd run electron:compile && electron-builder --win portable --x64"
   },
   "dependencies": {
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "electron": "43.4.1",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "concurrently": "10.0.5",
+    "electron": "43.4.1",
+    "electron-builder": "26.0.12",
     "prettier": "3.9.6",
     "typescript": "5.9.3",
     "vitest": "4.1.11",

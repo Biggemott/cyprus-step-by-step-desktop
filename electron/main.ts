@@ -4,6 +4,10 @@ import path from "node:path";
 import { loadAppState, resetScenarioProgress, saveScenarioProgress } from "./progress-store";
 import { ReminderScheduler } from "./reminder-scheduler";
 import {
+  configureWindowsNotificationIdentity,
+  ensureWindowsNotificationShortcut,
+} from "./windows-notification-identity";
+import {
   isKnownStepId,
   isSupportedReminderOption,
   isSupportedScenarioId,
@@ -15,34 +19,7 @@ let mainWindow: BrowserWindow | null = null;
 const reminderScheduler = new ReminderScheduler();
 const invalidRequest = (): OperationResult => ({ ok: false, error: "Invalid request." });
 
-app.setAppUserModelId("com.cyprussteps.desktop");
-
-function configureDevelopmentNotificationShortcut() {
-  if (
-    process.platform !== "win32" ||
-    app.isPackaged ||
-    process.env.ELECTRON_CREATE_NOTIFICATION_SHORTCUT !== "1"
-  )
-    return;
-  const shortcutPath = path.join(
-    app.getPath("appData"),
-    "Microsoft",
-    "Windows",
-    "Start Menu",
-    "Programs",
-    "Cyprus Step-by-Step (Development).lnk",
-  );
-  const created = shell.writeShortcutLink(shortcutPath, "replace", {
-    target: process.execPath,
-    args: ".",
-    cwd: process.cwd(),
-    description: "Cyprus Step-by-Step development notification identity",
-    appUserModelId: "com.cyprussteps.desktop",
-  });
-  console.log(
-    `[reminders] Development Start Menu shortcut ${created ? "created" : "could not be created"}: ${shortcutPath}`,
-  );
-}
+configureWindowsNotificationIdentity();
 
 ipcMain.handle("progress:load", () => loadAppState());
 ipcMain.handle(
@@ -97,6 +74,9 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#F8F9F7",
+    icon: app.isPackaged
+      ? path.join(process.resourcesPath, "icon.png")
+      : path.join(__dirname, "..", "build", "icon.png"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -122,7 +102,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   if (!app.isPackaged)
     console.log(`[reminders] Notification.isSupported()=${Notification.isSupported()}.`);
-  configureDevelopmentNotificationShortcut();
+  ensureWindowsNotificationShortcut();
   reminderScheduler.restore();
   createWindow();
   app.on("activate", () => {

@@ -1,0 +1,28 @@
+appId: com.cyprussteps.desktop
+productName: Cyprus Step-by-Step
+directories:
+  output: release
+asar: true
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+files:
+  - dist-electron/**/*
+  - out/**/*
+  - package.json
+  - "!node_modules/**/*"
+  - "!references/**/*"
+  - "!tests/**/*"
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/*.tsx"
+  - "!**/*.md"
+win:
+  icon: build/icon.png
+  signAndEditExecutable: false
+  target:
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: Cyprus-Step-by-Step-${version}-portable.exe
