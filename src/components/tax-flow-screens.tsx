@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Answers, TaxSource, TaxStep } from "@/data/tax-scenario";
 import type { PersistedReminder, ReminderOption } from "@/shared/progress-types";
 import { answerOptions, taxScenario } from "@/data/tax-scenario";
@@ -104,13 +104,14 @@ export function ChecklistScreen({
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const resetMenuItemRef = useRef<HTMLButtonElement>(null);
   const resetDialogRef = useRef<HTMLElement>(null);
   const resetRestoreFocusRef = useRef(true);
-  const closeMoreMenu = () => {
+  const closeMoreMenu = useCallback(() => {
     setIsMoreOpen(false);
     requestAnimationFrame(() => moreTriggerRef.current?.focus());
-  };
+  }, []);
   useEffect(() => {
     if (!isMoreOpen) return;
     const frame = requestAnimationFrame(() => resetMenuItemRef.current?.focus());
@@ -120,12 +121,17 @@ export function ChecklistScreen({
         closeMoreMenu();
       }
     };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setIsMoreOpen(false);
+    };
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [isMoreOpen]);
+  }, [closeMoreMenu, isMoreOpen]);
   useModalFocus(
     isResetConfirmOpen,
     resetDialogRef,
@@ -159,7 +165,7 @@ export function ChecklistScreen({
         <button className="breadcrumb" onClick={onBack}>
           ← <span>{backLabel}</span>
         </button>
-        <div className="more-menu">
+        <div className="more-menu" ref={moreMenuRef}>
           <button
             ref={moreTriggerRef}
             className="more-button"

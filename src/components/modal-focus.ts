@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const focusableSelector =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -10,6 +10,9 @@ export function useModalFocus(
   onEscape: () => void,
   restoreFocus = true,
 ) {
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   useEffect(() => {
     if (!active) return;
     const dialog = dialogRef.current;
@@ -24,7 +27,7 @@ export function useModalFocus(
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -48,5 +51,5 @@ export function useModalFocus(
       document.removeEventListener("keydown", onKeyDown, true);
       if (restoreFocus) requestAnimationFrame(() => openerRef.current?.focus());
     };
-  }, [active, dialogRef, onEscape, openerRef, restoreFocus]);
+  }, [active, dialogRef, openerRef, restoreFocus]);
 }
