@@ -1,8 +1,17 @@
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { loadAppState, resetScenarioProgress, saveScenarioProgress, type PersistedScenarioProgress } from "./progress-store";
 
 let mainWindow: BrowserWindow | null = null;
+const supportedScenarioId = "get_tax_number_and_tax_for_all_cyprus";
+
+ipcMain.handle("progress:load", () => loadAppState());
+ipcMain.handle("progress:save", (_event, scenarioId: string, progress: PersistedScenarioProgress) => { if (scenarioId === supportedScenarioId) saveScenarioProgress(scenarioId, progress); });
+ipcMain.handle("progress:reset", (_event, scenarioId: string) => scenarioId === supportedScenarioId && resetScenarioProgress(scenarioId));
+ipcMain.handle("external:open", async (_event, value: string) => {
+  try { const url = new URL(value); if (url.protocol !== "https:") return false; await shell.openExternal(url.toString()); return true; } catch { return false; }
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
