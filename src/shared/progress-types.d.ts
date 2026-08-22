@@ -14,7 +14,17 @@ export type PersistedScenarioProgress = {
   lastInteractionAt: number;
 };
 
+export type ScenarioProgressMutation = Pick<
+  PersistedScenarioProgress,
+  "answers" | "completedStepIds" | "lastInteractionAt"
+>;
+
 export type PersistedAppState = {
   version: 1;
   scenarios: Record<string, PersistedScenarioProgress>;
 };
+
+export type OperationResult = { ok: true } | { ok: false; error: string };
+
+export type ReminderOperationResult =
+  { ok: true; reminder: PersistedReminder } | { ok: false; error: string };

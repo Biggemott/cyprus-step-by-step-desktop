@@ -1,23 +1,26 @@
 import type {
   PersistedAppState,
-  PersistedReminder,
-  PersistedScenarioProgress,
+  OperationResult,
+  ReminderOperationResult,
   ReminderOption,
+  ScenarioProgressMutation,
 } from "../shared/progress-types";
 
 declare global {
   interface Window {
     cyprusSteps?: {
       loadAppState(): Promise<PersistedAppState>;
-      saveScenarioProgress(scenarioId: string, progress: PersistedScenarioProgress): Promise<void>;
-      resetScenarioProgress(scenarioId: string): Promise<boolean>;
+      saveScenarioProgress(
+        scenarioId: string,
+        progress: ScenarioProgressMutation,
+      ): Promise<OperationResult>;
+      resetScenarioProgress(scenarioId: string): Promise<OperationResult>;
       setStepReminder(
         scenarioId: string,
         stepId: string,
         option: ReminderOption,
-        stepTitle: string,
-      ): Promise<PersistedReminder | null>;
-      removeStepReminder(scenarioId: string, stepId: string): Promise<void>;
+      ): Promise<ReminderOperationResult>;
+      removeStepReminder(scenarioId: string, stepId: string): Promise<OperationResult>;
       openExternal(url: string): Promise<boolean>;
     };
   }

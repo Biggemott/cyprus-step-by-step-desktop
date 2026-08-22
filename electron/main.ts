@@ -1,17 +1,55 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification, shell } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import {
-  loadAppState,
-  resetScenarioProgress,
-  saveScenarioProgress,
-  type PersistedScenarioProgress,
-} from "./progress-store";
+import { loadAppState, resetScenarioProgress, saveScenarioProgress } from "./progress-store";
 import { ReminderScheduler } from "./reminder-scheduler";
+import {
+  isKnownStepId,
+  knownQuestionIds,
+  supportedReminderOptions,
+  supportedScenarioId,
+  validAnswerValues,
+} from "./scenario-contract";
+import type {
+  OperationResult,
+  ReminderOption,
+  ScenarioProgressMutation,
+} from "../src/shared/progress-types";
 
 let mainWindow: BrowserWindow | null = null;
-const supportedScenarioId = "get_tax_number_and_tax_for_all_cyprus";
 const reminderScheduler = new ReminderScheduler();
+const invalidRequest = (): OperationResult => ({ ok: false, error: "Invalid request." });
+
+function isSupportedScenarioId(value: unknown): value is string {
+  return value === supportedScenarioId;
+}
+function isReminderOption(value: unknown): value is ReminderOption {
+  return typeof value === "string" && supportedReminderOptions.has(value as ReminderOption);
+}
+function isValidProgress(value: unknown): value is ScenarioProgressMutation {
+  if (typeof value !== "object" || value === null) return false;
+  const progress = value as Record<string, unknown>;
+  if (
+    typeof progress.answers !== "object" ||
+    progress.answers === null ||
+    !Array.isArray(progress.completedStepIds) ||
+    typeof progress.lastInteractionAt !== "number" ||
+    !Number.isFinite(progress.lastInteractionAt)
+  )
+    return false;
+  const answers = progress.answers as Record<string, unknown>;
+  const completedStepIds = progress.completedStepIds;
+  return (
+    Object.entries(answers).every(
+      ([questionId, answer]) =>
+        knownQuestionIds.has(questionId) &&
+        typeof answer === "string" &&
+        validAnswerValues.has(answer),
+    ) &&
+    completedStepIds.every(isKnownStepId) &&
+    new Set(completedStepIds).size === completedStepIds.length
+  );
+}
 
 app.setAppUserModelId("com.cyprussteps.desktop");
 
@@ -45,40 +83,33 @@ function configureDevelopmentNotificationShortcut() {
 ipcMain.handle("progress:load", () => loadAppState());
 ipcMain.handle(
   "progress:save",
-  (_event, scenarioId: string, progress: PersistedScenarioProgress) => {
-    if (scenarioId !== supportedScenarioId) return;
-    for (const stepId of progress.completedStepIds) reminderScheduler.cancel(scenarioId, stepId);
-    saveScenarioProgress(scenarioId, progress);
+  (_event, scenarioId: unknown, progress: unknown): OperationResult => {
+    if (!isSupportedScenarioId(scenarioId) || !isValidProgress(progress)) return invalidRequest();
+    const result = saveScenarioProgress(scenarioId, progress);
+    if (!result.ok) return result;
+    for (const stepId of progress.completedStepIds)
+      reminderScheduler.clearTimer(scenarioId, stepId);
+    return result;
   },
 );
-ipcMain.handle("progress:reset", (_event, scenarioId: string) => {
-  if (scenarioId !== supportedScenarioId) return false;
-  reminderScheduler.cancelAll(scenarioId);
-  return resetScenarioProgress(scenarioId);
+ipcMain.handle("progress:reset", (_event, scenarioId: unknown): OperationResult => {
+  if (!isSupportedScenarioId(scenarioId)) return invalidRequest();
+  const result = resetScenarioProgress(scenarioId);
+  if (result.ok) reminderScheduler.clearAllTimers(scenarioId);
+  return result;
+});
+ipcMain.handle("reminder:set", (_event, scenarioId: unknown, stepId: unknown, option: unknown) => {
+  if (!isSupportedScenarioId(scenarioId) || !isKnownStepId(stepId) || !isReminderOption(option))
+    return invalidRequest();
+  return reminderScheduler.set(scenarioId, stepId, option);
 });
 ipcMain.handle(
-  "reminder:set",
-  (
-    _event,
-    scenarioId: string,
-    stepId: string,
-    option: "tomorrow" | "in_3_days" | "in_1_week",
-    stepTitle: string,
-  ) => {
-    if (
-      scenarioId !== supportedScenarioId ||
-      typeof stepId !== "string" ||
-      typeof stepTitle !== "string" ||
-      !["tomorrow", "in_3_days", "in_1_week"].includes(option)
-    )
-      return null;
-    return reminderScheduler.set(scenarioId, stepId, option, stepTitle);
+  "reminder:remove",
+  (_event, scenarioId: unknown, stepId: unknown): OperationResult => {
+    if (!isSupportedScenarioId(scenarioId) || !isKnownStepId(stepId)) return invalidRequest();
+    return reminderScheduler.cancel(scenarioId, stepId);
   },
 );
-ipcMain.handle("reminder:remove", (_event, scenarioId: string, stepId: string) => {
-  if (scenarioId === supportedScenarioId && typeof stepId === "string")
-    reminderScheduler.cancel(scenarioId, stepId);
-});
 ipcMain.handle("external:open", async (_event, value: string) => {
   try {
     const url = new URL(value);

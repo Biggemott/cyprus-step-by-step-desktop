@@ -195,17 +195,23 @@ export function CyprusStepsApp() {
   const [completedStepIds, setCompletedStepIds] = useState<Set<string>>(() => new Set());
   const [remindersByStepId, setRemindersByStepId] = useState<Record<string, PersistedReminder>>({});
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [appError, setAppError] = useState<string | null>(null);
   const contentAreaRef = useRef<HTMLElement>(null);
-  const saveProgress = (nextAnswers: Answers, nextCompleted: Set<string>) => {
+  const saveProgress = async (nextAnswers: Answers, nextCompleted: Set<string>) => {
     const finalizedAnswers: Record<string, string> = {};
     for (const [key, value] of Object.entries(nextAnswers))
       if (value) finalizedAnswers[key] = value;
-    void window.cyprusSteps?.saveScenarioProgress(targetScenarioId, {
+    const result = await window.cyprusSteps?.saveScenarioProgress(targetScenarioId, {
       answers: finalizedAnswers,
       completedStepIds: [...nextCompleted],
-      remindersByStepId: {},
       lastInteractionAt: Date.now(),
     });
+    if (!result?.ok) {
+      setAppError("Could not save your changes. Please try again.");
+      return false;
+    }
+    setAppError(null);
+    return true;
   };
   const hasChecklist = visibleSteps.length > 0;
   const doneCount = visibleSteps.filter((step) => completedStepIds.has(step.id)).length;
@@ -255,31 +261,35 @@ export function CyprusStepsApp() {
     const progress = (await window.cyprusSteps?.loadAppState())?.scenarios[targetScenarioId];
     if (progress) setRemindersByStepId(progress.remindersByStepId);
   };
-  const openChecklist = (origin: Origin) => {
-    saveProgress(answers, completedStepIds);
-    setScreen({ name: "checklist", origin });
+  const openChecklist = async (origin: Origin) => {
+    if (await saveProgress(answers, completedStepIds)) setScreen({ name: "checklist", origin });
   };
   const openScenario = (scenario: Scenario, origin: Origin) => {
     if (scenario.id === targetScenarioId)
       lifecycle === "available" ? setScreen({ name: "details", origin }) : openChecklist(origin);
   };
   const openCategory = (categoryId: CategoryId) => setScreen({ name: "category", categoryId });
-  const toggleStep = (stepId: string) =>
-    setCompletedStepIds((current) => {
-      const next = new Set(current);
-      const isCompleting = !next.has(stepId);
-      if (isCompleting) {
-        next.add(stepId);
-        setRemindersByStepId((reminders) => {
-          const { [stepId]: _removed, ...remaining } = reminders;
-          return remaining;
-        });
-      } else next.delete(stepId);
-      saveProgress(answers, next);
-      return next;
-    });
+  const toggleStep = async (stepId: string) => {
+    const next = new Set(completedStepIds);
+    const isCompleting = !next.has(stepId);
+    if (isCompleting) next.add(stepId);
+    else next.delete(stepId);
+    if (!(await saveProgress(answers, next))) return false;
+    setCompletedStepIds(next);
+    if (isCompleting)
+      setRemindersByStepId((current) => {
+        const { [stepId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    return true;
+  };
   const resetProgress = async (origin: Origin) => {
-    if (!(await window.cyprusSteps?.resetScenarioProgress(targetScenarioId))) return;
+    const result = await window.cyprusSteps?.resetScenarioProgress(targetScenarioId);
+    if (!result?.ok) {
+      setAppError("Could not save your changes. Please try again.");
+      return;
+    }
+    setAppError(null);
     setAnswers({});
     setVisibleSteps([]);
     setCompletedStepIds(new Set());
@@ -339,10 +349,12 @@ export function CyprusStepsApp() {
           else {
             const nextSteps = buildChecklist(taxScenario.steps, answers);
             const emptyCompleted = new Set<string>();
-            setVisibleSteps(nextSteps);
-            setCompletedStepIds(emptyCompleted);
-            saveProgress(answers, emptyCompleted);
-            setScreen({ name: "checklist", origin: screen.origin });
+            void saveProgress(answers, emptyCompleted).then((saved) => {
+              if (!saved) return;
+              setVisibleSteps(nextSteps);
+              setCompletedStepIds(emptyCompleted);
+              setScreen({ name: "checklist", origin: screen.origin });
+            });
           }
         }}
       />
@@ -374,20 +386,30 @@ export function CyprusStepsApp() {
         reminder={remindersByStepId[step.id]}
         onBack={() => setScreen({ name: "checklist", origin: screen.origin })}
         onToggle={() => {
-          toggleStep(step.id);
-          setScreen({ name: "checklist", origin: screen.origin });
+          void toggleStep(step.id).then((saved) => {
+            if (saved) setScreen({ name: "checklist", origin: screen.origin });
+          });
         }}
         onSetReminder={async (option: ReminderOption) => {
           const reminder = await window.cyprusSteps?.setStepReminder(
             targetScenarioId,
             step.id,
             option,
-            step.title,
           );
-          if (reminder) setRemindersByStepId((current) => ({ ...current, [step.id]: reminder }));
+          if (reminder?.ok) {
+            setAppError(null);
+            setRemindersByStepId((current) => ({ ...current, [step.id]: reminder.reminder }));
+            return true;
+          }
+          return false;
         }}
         onRemoveReminder={async () => {
-          await window.cyprusSteps?.removeStepReminder(targetScenarioId, step.id);
+          const result = await window.cyprusSteps?.removeStepReminder(targetScenarioId, step.id);
+          if (!result?.ok) {
+            setAppError("Could not save your changes. Please try again.");
+            return;
+          }
+          setAppError(null);
           setRemindersByStepId((current) => {
             const { [step.id]: _removed, ...next } = current;
             return next;
@@ -513,6 +535,14 @@ export function CyprusStepsApp() {
         onCategory={openCategory}
       />
       <main className="content-area" ref={contentAreaRef}>
+        {appError && (
+          <div className="app-error" role="alert">
+            <span>{appError}</span>
+            <button aria-label="Dismiss error" onClick={() => setAppError(null)}>
+              ×
+            </button>
+          </div>
+        )}
         {content}
       </main>
     </div>

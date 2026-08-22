@@ -97,7 +97,7 @@ export function ChecklistScreen({
   completed: Set<string>;
   backLabel: string;
   onBack: () => void;
-  onToggle: (id: string) => void;
+  onToggle: (id: string) => Promise<boolean>;
   onOpen: (id: string) => void;
   onReset: () => Promise<void>;
 }) {
@@ -290,12 +290,13 @@ export function StepDetailsScreen({
   reminder?: PersistedReminder;
   onBack: () => void;
   onToggle: () => void;
-  onSetReminder: (option: ReminderOption) => Promise<void>;
+  onSetReminder: (option: ReminderOption) => Promise<boolean>;
   onRemoveReminder: () => Promise<void>;
   onOpenSource: (url: string) => void;
 }) {
   const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false);
   const [selectedOption, setSelectedOption] = useState<ReminderOption>("tomorrow");
+  const [reminderError, setReminderError] = useState<string | null>(null);
   const reminderDialogRef = useRef<HTMLElement>(null);
   const reminderOpenerRef = useRef<HTMLElement>(null);
   useModalFocus(isReminderDialogOpen, reminderDialogRef, reminderOpenerRef, () =>
@@ -307,6 +308,7 @@ export function StepDetailsScreen({
   const openReminderDialog = (event: MouseEvent<HTMLElement>) => {
     reminderOpenerRef.current = event.currentTarget;
     setSelectedOption(reminder?.option ?? "tomorrow");
+    setReminderError(null);
     setIsReminderDialogOpen(true);
   };
   return (
@@ -392,6 +394,11 @@ export function StepDetailsScreen({
             aria-labelledby="reminder-dialog-title"
           >
             <h2 id="reminder-dialog-title">Set reminder</h2>
+            {reminderError && (
+              <p className="reminder-error" role="alert">
+                {reminderError}
+              </p>
+            )}
             <div className="reminder-options" role="radiogroup" aria-label="Reminder timing">
               {(Object.keys(reminderLabels) as ReminderOption[]).map((option) => (
                 <button
@@ -414,8 +421,12 @@ export function StepDetailsScreen({
               <button
                 className="primary-button reminder-confirm"
                 onClick={() => {
-                  void onSetReminder(selectedOption);
-                  setIsReminderDialogOpen(false);
+                  void onSetReminder(selectedOption).then((saved) => {
+                    if (saved) {
+                      setReminderError(null);
+                      setIsReminderDialogOpen(false);
+                    } else setReminderError("Could not save your changes. Please try again.");
+                  });
                 }}
               >
                 Set reminder

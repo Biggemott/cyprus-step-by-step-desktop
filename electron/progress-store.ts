@@ -1,16 +1,22 @@
 import { app } from "electron";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type {
   PersistedAppState,
   PersistedReminder,
   PersistedScenarioProgress,
+  ScenarioProgressMutation,
 } from "../src/shared/progress-types";
+import type { OperationResult } from "../src/shared/progress-types";
 
 export type { PersistedAppState, PersistedScenarioProgress } from "../src/shared/progress-types";
 
 const emptyState = (): PersistedAppState => ({ version: 1, scenarios: {} });
 const storePath = () => path.join(app.getPath("userData"), "cyprussteps-progress.json");
+type LoadResult =
+  | { kind: "loaded"; state: PersistedAppState }
+  | { kind: "missing"; state: PersistedAppState }
+  | { kind: "failed"; error: string };
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     typeof value === "object" &&
@@ -40,7 +46,7 @@ function parseState(value: unknown): PersistedAppState | null {
     return null;
   const scenarios: Record<string, PersistedScenarioProgress> = {};
   for (const [id, progress] of Object.entries(state.scenarios)) {
-    if (typeof progress !== "object" || progress === null) continue;
+    if (typeof progress !== "object" || progress === null) return null;
     const item = progress as {
       answers?: unknown;
       completedStepIds?: unknown;
@@ -53,12 +59,13 @@ function parseState(value: unknown): PersistedAppState | null {
       !item.completedStepIds.every((step) => typeof step === "string") ||
       typeof item.lastInteractionAt !== "number"
     )
-      continue;
+      return null;
     const remindersByStepId: Record<string, PersistedReminder> = {};
-    if (typeof item.remindersByStepId === "object" && item.remindersByStepId !== null)
+    if (typeof item.remindersByStepId === "object" && item.remindersByStepId !== null) {
       for (const [stepId, reminder] of Object.entries(item.remindersByStepId))
-        if (isReminder(reminder) && reminder.stepId === stepId)
-          remindersByStepId[stepId] = reminder;
+        if (!isReminder(reminder) || reminder.stepId !== stepId) return null;
+        else remindersByStepId[stepId] = reminder;
+    }
     scenarios[id] = {
       answers: item.answers,
       completedStepIds: item.completedStepIds,
@@ -68,48 +75,71 @@ function parseState(value: unknown): PersistedAppState | null {
   }
   return { version: 1, scenarios };
 }
-export function loadAppState(): PersistedAppState {
+export function loadAppStateResult(): LoadResult {
+  const filePath = storePath();
+  if (!existsSync(filePath)) return { kind: "missing", state: emptyState() };
   try {
-    return parseState(JSON.parse(readFileSync(storePath(), "utf8"))) ?? emptyState();
-  } catch {
-    return emptyState();
+    const state = parseState(JSON.parse(readFileSync(filePath, "utf8")));
+    if (state) return { kind: "loaded", state };
+    console.error("[progress] Could not load persisted progress: invalid file format.");
+    return { kind: "failed", error: "Saved progress could not be read." };
+  } catch (error) {
+    console.error("[progress] Could not load persisted progress:", error);
+    return { kind: "failed", error: "Saved progress could not be read." };
   }
 }
-function writeState(state: PersistedAppState): boolean {
+export function loadAppState(): PersistedAppState {
+  const result = loadAppStateResult();
+  return result.kind === "failed" ? emptyState() : result.state;
+}
+function writeState(state: PersistedAppState): OperationResult {
   try {
     const filePath = storePath();
     const tempPath = `${filePath}.tmp`;
     writeFileSync(tempPath, JSON.stringify(state), "utf8");
     renameSync(tempPath, filePath);
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (error) {
+    console.error("[progress] Could not write persisted progress:", error);
+    return { ok: false, error: "Could not save progress." };
   }
 }
 export function saveScenarioProgress(
   scenarioId: string,
-  progress: PersistedScenarioProgress,
-): void {
-  const state = loadAppState();
+  progress: ScenarioProgressMutation,
+): OperationResult {
+  const loaded = loadAppStateResult();
+  if (loaded.kind === "failed") return { ok: false, error: loaded.error };
+  const state = loaded.state;
   const previous = state.scenarios[scenarioId];
   state.scenarios[scenarioId] = {
-    ...progress,
-    remindersByStepId: previous?.remindersByStepId ?? progress.remindersByStepId,
+    answers: progress.answers,
+    completedStepIds: progress.completedStepIds,
+    lastInteractionAt: progress.lastInteractionAt,
+    remindersByStepId: Object.fromEntries(
+      Object.entries(previous?.remindersByStepId ?? {}).filter(
+        ([stepId]) => !progress.completedStepIds.includes(stepId),
+      ),
+    ),
   };
-  writeState(state);
+  return writeState(state);
 }
 export function updateScenarioProgress(
   scenarioId: string,
   update: (progress: PersistedScenarioProgress) => PersistedScenarioProgress,
-): void {
-  const state = loadAppState();
+): OperationResult {
+  const loaded = loadAppStateResult();
+  if (loaded.kind === "failed") return { ok: false, error: loaded.error };
+  const state = loaded.state;
   const progress = state.scenarios[scenarioId];
-  if (!progress) return;
+  if (!progress) return { ok: false, error: "Progress was not found." };
   state.scenarios[scenarioId] = update(progress);
-  writeState(state);
+  return writeState(state);
 }
-export function resetScenarioProgress(scenarioId: string): boolean {
-  const state = loadAppState();
+export function resetScenarioProgress(scenarioId: string): OperationResult {
+  const loaded = loadAppStateResult();
+  if (loaded.kind === "failed") return { ok: false, error: loaded.error };
+  const state = loaded.state;
   delete state.scenarios[scenarioId];
   return writeState(state);
 }

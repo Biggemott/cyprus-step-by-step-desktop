@@ -1,6 +1,12 @@
 import { app, Notification } from "electron";
-import type { PersistedReminder, ReminderOption } from "../src/shared/progress-types";
-import { loadAppState, updateScenarioProgress } from "./progress-store";
+import type {
+  OperationResult,
+  PersistedReminder,
+  ReminderOperationResult,
+  ReminderOption,
+} from "../src/shared/progress-types";
+import { loadAppState, loadAppStateResult, updateScenarioProgress } from "./progress-store";
+import { getStepTitle } from "./scenario-contract";
 
 const DEMO_DELAY_MS = 30_000;
 type Timer = ReturnType<typeof setTimeout>;
@@ -11,48 +17,51 @@ export class ReminderScheduler {
     return `${scenarioId}:${stepId}`;
   }
 
-  set(
-    scenarioId: string,
-    stepId: string,
-    option: ReminderOption,
-    stepTitle: string,
-  ): PersistedReminder | null {
-    const progress = loadAppState().scenarios[scenarioId];
-    if (!progress || progress.completedStepIds.includes(stepId)) return null;
-    this.cancel(scenarioId, stepId);
+  set(scenarioId: string, stepId: string, option: ReminderOption): ReminderOperationResult {
+    const loaded = loadAppStateResult();
+    if (loaded.kind === "failed") return { ok: false, error: loaded.error };
+    const progress = loaded.state.scenarios[scenarioId];
+    if (!progress || progress.completedStepIds.includes(stepId))
+      return { ok: false, error: "The reminder could not be set." };
     const reminder: PersistedReminder = {
       stepId,
       option,
       dueAt: Date.now() + DEMO_DELAY_MS,
-      stepTitle,
+      stepTitle: getStepTitle(stepId),
     };
-    updateScenarioProgress(scenarioId, (current) => ({
+    const result = updateScenarioProgress(scenarioId, (current) => ({
       ...current,
       remindersByStepId: { ...current.remindersByStepId, [stepId]: reminder },
     }));
+    if (!result.ok) return result;
     this.schedule(scenarioId, reminder);
-    return reminder;
+    return { ok: true, reminder };
   }
 
-  cancel(scenarioId: string, stepId: string) {
+  cancel(scenarioId: string, stepId: string): OperationResult {
+    const result = updateScenarioProgress(scenarioId, (current) => {
+      const { [stepId]: _removed, ...remindersByStepId } = current.remindersByStepId;
+      return { ...current, remindersByStepId };
+    });
+    if (!result.ok) return result;
+    this.clearTimer(scenarioId, stepId);
+    return result;
+  }
+
+  clearTimer(scenarioId: string, stepId: string) {
     const key = this.key(scenarioId, stepId);
     const timer = this.timers.get(key);
     if (timer) clearTimeout(timer);
     this.timers.delete(key);
-    updateScenarioProgress(scenarioId, (current) => {
-      const { [stepId]: _removed, ...remindersByStepId } = current.remindersByStepId;
-      return { ...current, remindersByStepId };
-    });
   }
 
-  cancelAll(scenarioId: string) {
+  clearAllTimers(scenarioId: string) {
     for (const key of [...this.timers.keys()])
       if (key.startsWith(`${scenarioId}:`)) {
         const timer = this.timers.get(key);
         if (timer) clearTimeout(timer);
         this.timers.delete(key);
       }
-    updateScenarioProgress(scenarioId, (current) => ({ ...current, remindersByStepId: {} }));
   }
 
   restore() {
@@ -60,7 +69,8 @@ export class ReminderScheduler {
       for (const reminder of Object.values(progress.remindersByStepId)) {
         if (progress.completedStepIds.includes(reminder.stepId)) {
           this.log(`Removing reminder for completed step ${reminder.stepId} during restore.`);
-          this.cancel(scenarioId, reminder.stepId);
+          const result = this.cancel(scenarioId, reminder.stepId);
+          if (!result.ok) this.log(`Could not remove completed reminder: ${result.error}`);
         } else {
           this.log(
             `Restoring ${reminder.dueAt <= Date.now() ? "overdue" : "pending"} reminder for ${reminder.stepId}.`,
@@ -114,12 +124,14 @@ export class ReminderScheduler {
   }
 
   private removeDeliveredReminder(scenarioId: string, reminder: PersistedReminder) {
-    updateScenarioProgress(scenarioId, (current) => {
+    const result = updateScenarioProgress(scenarioId, (current) => {
       const persistedReminder = current.remindersByStepId[reminder.stepId];
       if (!persistedReminder || persistedReminder.dueAt !== reminder.dueAt) return current;
       const { [reminder.stepId]: _delivered, ...remindersByStepId } = current.remindersByStepId;
       return { ...current, remindersByStepId };
     });
+    if (!result.ok)
+      this.log(`Could not remove delivered reminder from persistence: ${result.error}`);
   }
 
   private log(message: string) {
