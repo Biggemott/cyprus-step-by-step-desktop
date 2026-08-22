@@ -5,51 +5,15 @@ import { loadAppState, resetScenarioProgress, saveScenarioProgress } from "./pro
 import { ReminderScheduler } from "./reminder-scheduler";
 import {
   isKnownStepId,
-  knownQuestionIds,
-  supportedReminderOptions,
-  supportedScenarioId,
-  validAnswerValues,
+  isSupportedReminderOption,
+  isSupportedScenarioId,
+  isValidScenarioProgress,
 } from "./scenario-contract";
-import type {
-  OperationResult,
-  ReminderOption,
-  ScenarioProgressMutation,
-} from "../src/shared/progress-types";
+import type { OperationResult } from "../src/shared/progress-types";
 
 let mainWindow: BrowserWindow | null = null;
 const reminderScheduler = new ReminderScheduler();
 const invalidRequest = (): OperationResult => ({ ok: false, error: "Invalid request." });
-
-function isSupportedScenarioId(value: unknown): value is string {
-  return value === supportedScenarioId;
-}
-function isReminderOption(value: unknown): value is ReminderOption {
-  return typeof value === "string" && supportedReminderOptions.has(value as ReminderOption);
-}
-function isValidProgress(value: unknown): value is ScenarioProgressMutation {
-  if (typeof value !== "object" || value === null) return false;
-  const progress = value as Record<string, unknown>;
-  if (
-    typeof progress.answers !== "object" ||
-    progress.answers === null ||
-    !Array.isArray(progress.completedStepIds) ||
-    typeof progress.lastInteractionAt !== "number" ||
-    !Number.isFinite(progress.lastInteractionAt)
-  )
-    return false;
-  const answers = progress.answers as Record<string, unknown>;
-  const completedStepIds = progress.completedStepIds;
-  return (
-    Object.entries(answers).every(
-      ([questionId, answer]) =>
-        knownQuestionIds.has(questionId) &&
-        typeof answer === "string" &&
-        validAnswerValues.has(answer),
-    ) &&
-    completedStepIds.every(isKnownStepId) &&
-    new Set(completedStepIds).size === completedStepIds.length
-  );
-}
 
 app.setAppUserModelId("com.cyprussteps.desktop");
 
@@ -84,7 +48,8 @@ ipcMain.handle("progress:load", () => loadAppState());
 ipcMain.handle(
   "progress:save",
   (_event, scenarioId: unknown, progress: unknown): OperationResult => {
-    if (!isSupportedScenarioId(scenarioId) || !isValidProgress(progress)) return invalidRequest();
+    if (!isSupportedScenarioId(scenarioId) || !isValidScenarioProgress(progress))
+      return invalidRequest();
     const result = saveScenarioProgress(scenarioId, progress);
     if (!result.ok) return result;
     for (const stepId of progress.completedStepIds)
@@ -99,7 +64,11 @@ ipcMain.handle("progress:reset", (_event, scenarioId: unknown): OperationResult 
   return result;
 });
 ipcMain.handle("reminder:set", (_event, scenarioId: unknown, stepId: unknown, option: unknown) => {
-  if (!isSupportedScenarioId(scenarioId) || !isKnownStepId(stepId) || !isReminderOption(option))
+  if (
+    !isSupportedScenarioId(scenarioId) ||
+    !isKnownStepId(stepId) ||
+    !isSupportedReminderOption(option)
+  )
     return invalidRequest();
   return reminderScheduler.set(scenarioId, stepId, option);
 });

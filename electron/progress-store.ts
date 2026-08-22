@@ -8,6 +8,7 @@ import type {
   ScenarioProgressMutation,
 } from "../src/shared/progress-types";
 import type { OperationResult } from "../src/shared/progress-types";
+import { applyScenarioProgressMutation } from "./progress-mutation";
 
 export type { PersistedAppState, PersistedScenarioProgress } from "../src/shared/progress-types";
 
@@ -21,6 +22,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     typeof value === "object" &&
     value !== null &&
+    !Array.isArray(value) &&
     Object.values(value).every((item) => typeof item === "string")
   );
 }
@@ -112,16 +114,7 @@ export function saveScenarioProgress(
   if (loaded.kind === "failed") return { ok: false, error: loaded.error };
   const state = loaded.state;
   const previous = state.scenarios[scenarioId];
-  state.scenarios[scenarioId] = {
-    answers: progress.answers,
-    completedStepIds: progress.completedStepIds,
-    lastInteractionAt: progress.lastInteractionAt,
-    remindersByStepId: Object.fromEntries(
-      Object.entries(previous?.remindersByStepId ?? {}).filter(
-        ([stepId]) => !progress.completedStepIds.includes(stepId),
-      ),
-    ),
-  };
+  state.scenarios[scenarioId] = applyScenarioProgressMutation(previous, progress);
   return writeState(state);
 }
 export function updateScenarioProgress(

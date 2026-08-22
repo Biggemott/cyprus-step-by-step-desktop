@@ -1,4 +1,4 @@
-import type { ReminderOption } from "../src/shared/progress-types";
+import type { ReminderOption, ScenarioProgressMutation } from "../src/shared/progress-types";
 
 export const supportedScenarioId = "get_tax_number_and_tax_for_all_cyprus";
 export const knownQuestionIds = new Set(["already_has_tax_number", "tax_for_all_access"]);
@@ -21,7 +21,41 @@ const stepTitles: Record<string, string> = {
 };
 
 export function isKnownStepId(value: unknown): value is string {
-  return typeof value === "string" && value in stepTitles;
+  return typeof value === "string" && Object.hasOwn(stepTitles, value);
+}
+
+export function isSupportedScenarioId(value: unknown): value is string {
+  return value === supportedScenarioId;
+}
+
+export function isSupportedReminderOption(value: unknown): value is ReminderOption {
+  return typeof value === "string" && supportedReminderOptions.has(value as ReminderOption);
+}
+
+export function isValidScenarioProgress(value: unknown): value is ScenarioProgressMutation {
+  if (typeof value !== "object" || value === null) return false;
+  const progress = value as Record<string, unknown>;
+  if (
+    typeof progress.answers !== "object" ||
+    progress.answers === null ||
+    Array.isArray(progress.answers) ||
+    !Array.isArray(progress.completedStepIds) ||
+    typeof progress.lastInteractionAt !== "number" ||
+    !Number.isFinite(progress.lastInteractionAt)
+  )
+    return false;
+  const answers = progress.answers as Record<string, unknown>;
+  const completedStepIds = progress.completedStepIds;
+  return (
+    Object.entries(answers).every(
+      ([questionId, answer]) =>
+        knownQuestionIds.has(questionId) &&
+        typeof answer === "string" &&
+        validAnswerValues.has(answer),
+    ) &&
+    completedStepIds.every(isKnownStepId) &&
+    new Set(completedStepIds).size === completedStepIds.length
+  );
 }
 
 export function getStepTitle(stepId: string): string {
