@@ -2,6 +2,8 @@
 
 Cyprus Step-by-Step Desktop is a desktop prototype of Cyprus Step-by-Step built with Next.js, React, TypeScript, and Electron. It demonstrates a complete desktop vertical slice around one Cyprus tax scenario: getting a tax number and Tax For All access.
 
+The main app is Kotlin Multiplatform (Android + iOS); this repo explores a desktop UX with Next.js and Electron.
+
 The original [Cyprus Step-by-Step mobile app](https://play.google.com/store/apps/details?id=com.cyprussteps.app) is available on Google Play; this repository explores a focused desktop experience built around one complete scenario flow.
 
 ![Cyprus Step-by-Step desktop home screen with saved checklist progress](docs/screenshot-home-progress.png)
